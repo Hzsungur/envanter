@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Stok Terminali Pro</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        #reader { width: 100%; border-radius: 24px; overflow: hidden; border: none !important; }
+        #reader__dashboard_section_csr button {
+            background-color: #4F46E5 !important; color: white !important;
+            padding: 12px 24px !important; border-radius: 14px !important; font-weight: bold; border: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans antialiased text-slate-900">
+
+    <div class="max-w-md mx-auto min-h-screen flex flex-col p-4">
+        <div class="flex justify-between items-center py-4">
+            <h1 class="text-2xl font-black tracking-tighter text-indigo-600 italic">TERMINAL v3.5</h1>
+            <button onclick="exportToExcel()" class="bg-emerald-500 text-white p-3 rounded-2xl shadow-lg active:scale-90 transition-transform flex items-center gap-2">
+                <span class="text-xs font-bold">EXCEL</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="bg-white p-2 rounded-[2rem] shadow-xl mb-6 border border-white">
+            <div id="reader"></div>
+        </div>
+
+        <div class="bg-white p-6 rounded-[2rem] shadow-sm mb-6 space-y-4 border border-slate-100">
+            <input type="text" id="barcode-input" class="w-full bg-slate-50 border-none rounded-2xl p-4 font-mono text-lg focus:ring-2 focus:ring-indigo-500" placeholder="Barkod No">
+            <input type="text" id="product-name" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-lg font-medium focus:ring-2 focus:ring-indigo-500" placeholder="Ürün Adı">
+            
+            <div class="flex gap-3">
+                <input type="number" id="product-qty" value="1" class="w-24 bg-slate-50 border-none rounded-2xl p-4 text-center font-bold text-xl focus:ring-2 focus:ring-indigo-500">
+                <button onclick="addItem()" class="flex-1 bg-indigo-600 text-white font-bold rounded-2xl active:scale-95 transition-all uppercase tracking-widest text-sm">
+                    LİSTEYE EKLE
+                </button>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-hidden flex flex-col">
+            <div class="flex justify-between items-center mb-4 px-2">
+                <span class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Envanter Akışı</span>
+                <button onclick="clearList()" class="text-red-400 text-[10px] font-bold hover:underline">TÜMÜNÜ SİL</button>
+            </div>
+            <div id="product-list" class="space-y-3 overflow-y-auto pb-10 flex-1">
+                </div>
+        </div>
+    </div>
+
+    <script>
+        let productData = JSON.parse(localStorage.getItem('terminal_v35')) || [];
+
+        // Barkod Tarayıcı
+        const html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: 250 }, (text) => {
+            document.getElementById('barcode-input').value = text;
+            if (navigator.vibrate) navigator.vibrate(50);
+        });
+
+        function addItem() {
+            const barcode = document.getElementById('barcode-input').value;
+            const name = document.getElementById('product-name').value;
+            const qty = parseInt(document.getElementById('product-qty').value);
+
+            if (!barcode || !name) return alert("Bilgileri girin!");
+
+            const existing = productData.findIndex(i => i.barcode === barcode);
+            if (existing !== -1) {
+                productData[existing].qty += qty;
+            } else {
+                productData.unshift({ barcode, name, qty });
+            }
+
+            saveAndRender();
+            document.getElementById('barcode-input').value = "";
+            document.getElementById('product-name').value = "";
+        }
+
+        function updateQty(index, val) {
+            productData[index].qty += val;
+            if (productData[index].qty <= 0) productData.splice(index, 1);
+            saveAndRender();
+        }
+
+        function saveAndRender() {
+            localStorage.setItem('terminal_v35', JSON.stringify(productData));
+            const list = document.getElementById('product-list');
+            list.innerHTML = productData.length ? '' : '<p class="text-center text-slate-300 text-xs py-10 italic">Liste boş...</p>';
+
+            productData.forEach((item, i) => {
+                list.innerHTML += `
+                    <div class="bg-white p-4 rounded-[1.5rem] flex items-center justify-between shadow-sm border border-slate-50">
+                        <div class="flex-1 min-w-0 pr-2">
+                            <h3 class="font-bold text-slate-800 truncate uppercase text-xs tracking-tight">${item.name}</h3>
+                            <p class="text-[10px] font-mono text-slate-400">${item.barcode}</p>
+                        </div>
+                        <div class="flex items-center bg-slate-50 rounded-xl p-1 border border-slate-100">
+                            <button onclick="updateQty(${i}, -1)" class="w-8 h-8 bg-white rounded-lg shadow-sm font-bold text-indigo-600">-</button>
+                            <span class="px-3 font-black text-xs text-slate-700">${item.qty}</span>
+                            <button onclick="updateQty(${i}, 1)" class="w-8 h-8 bg-white rounded-lg shadow-sm font-bold text-indigo-600">+</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function clearList() {
+            if(confirm("Tüm veriler silinsin mi?")) { productData = []; saveAndRender(); }
+        }
+
+        // GERÇEK EXCEL (.XLSX) OLUŞTURMA VE SÜTUN GENİŞLİĞİ AYARI
+        function exportToExcel() {
+            if (productData.length === 0) return alert("Liste boş!");
+
+            // Veriyi hazırla
+            const excelData = productData.map(item => ({
+                "Barkod": item.barcode,
+                "Ürün Adı": item.name,
+                "Adet": item.qty
+            }));
+
+            // Excel oluştur
+            const worksheet = XLSX.utils.json_to_sheet(excelData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Stok");
+
+            // SÜTUN GENİŞLİKLERİNİ AYARLA (Senin istediğin özellik)
+            const wscols = [
+                { wch: 20 }, // Barkod sütunu genişliği
+                { wch: 35 }, // Ürün Adı sütunu genişliği
+                { wch: 10 }  // Adet sütunu genişliği
+            ];
+            worksheet['!cols'] = wscols;
+
+            // Dosyayı .xlsx olarak indir (CSV değil!)
+            XLSX.writeFile(workbook, `Stok_Raporu_${new Date().toLocaleDateString()}.xlsx`);
+        }
+
+        saveAndRender();
+    </script>
+</body>
+</html>
